@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"strconv"
 
 	"github.com/skip2/go-qrcode"
 )
@@ -21,54 +20,50 @@ type QRResponse struct {
 }
 
 func main() {
-	http.HandleFunc("/generate-qr", generateQRHandler)
-	fmt.Println("🚀 Server running on http://localhost:8080")
+	http.HandleFunc("/generate-qr", handleGenerateQR)
+
+	fmt.Println("🚀 Backend running at http://localhost:8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
-func generateQRHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
+func handleGenerateQR(w http.ResponseWriter, r *http.Request) {
+	// Bật CORS
 	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 
+	// Xử lý preflight OPTIONS request
 	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		http.Error(w, "Only POST method is allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
 	var req QRRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	// Thông tin ngân hàng
-	bankID := "VCB"                     // Vietcombank
-	accountNo := "0123456789"           // STK ngân hàng
-	accountName := "NGUYEN VAN A"       // Tên chủ TK
-	amount := strconv.Itoa(req.Amount)  // Số tiền
-	addInfo := req.Note                 // Nội dung CK
+	// Giả lập nội dung thanh toán (ở đây chỉ tạo QR từ text)
+	paymentInfo := fmt.Sprintf("Pay %d VND - Note: %s", req.Amount, req.Note)
 
-	// Link VietQR (theo tiêu chuẩn Napas)
-	// Có thể đổi sang API VietQR chính thức nếu muốn
-	qrContent := fmt.Sprintf("https://img.vietqr.io/image/%s-%s-qr_only.png?amount=%s&addInfo=%s&accountName=%s",
-		bankID, accountNo, amount, addInfo, accountName)
-
-	// Tạo ảnh QR từ link
-	pngData, err := qrcode.Encode(qrContent, qrcode.Medium, 256)
+	// Tạo QR code dạng base64
+	qrBytes, err := qrcode.Encode(paymentInfo, qrcode.Medium, 256)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Error generating QR", http.StatusInternalServerError)
 		return
 	}
 
-	// Encode base64 để trả về
-	base64Image := "data:image/png;base64," + base64.StdEncoding.EncodeToString(pngData)
+	base64Image := base64.StdEncoding.EncodeToString(qrBytes)
+	qrDataURL := "data:image/png;base64," + base64Image
 
-	json.NewEncoder(w).Encode(QRResponse{
-		QRUrl: base64Image,
-	})
+	resp := QRResponse{QRUrl: qrDataURL}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
 }
