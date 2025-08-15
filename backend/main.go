@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/skip2/go-qrcode"
 )
@@ -22,17 +23,21 @@ type QRResponse struct {
 func main() {
 	http.HandleFunc("/generate-qr", handleGenerateQR)
 
-	fmt.Println("🚀 Backend running at http://localhost:8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	fmt.Println("🚀 Backend running at http://localhost:" + port)
+	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
 
 func handleGenerateQR(w http.ResponseWriter, r *http.Request) {
-	// Bật CORS
+	// CORS
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 
-	// Xử lý preflight OPTIONS request
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusOK)
 		return
@@ -49,11 +54,23 @@ func handleGenerateQR(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Giả lập nội dung thanh toán (ở đây chỉ tạo QR từ text)
-	paymentInfo := fmt.Sprintf("Pay %d VND - Note: %s", req.Amount, req.Note)
+	// Thông tin tài khoản MB Bank
+	bankCode := "970422"                      // Mã ngân hàng MB theo NAPAS
+	accountNumber := "0001244698984"          // STK của bạn
+	accountName := "QUACH THANH LONG"         // Tên chủ tài khoản
+	amount := req.Amount                      // Số tiền
+	addInfo := req.Note                       // Nội dung chuyển khoản
 
-	// Tạo QR code dạng base64
-	qrBytes, err := qrcode.Encode(paymentInfo, qrcode.Medium, 256)
+	// Link VietQR chính thức
+	// Tham khảo: https://vietqr.net
+	// Ví dụ: https://img.vietqr.io/image/{bank}-{account}-compact2.png?amount={amount}&addInfo={note}
+	vietQRLink := fmt.Sprintf(
+		"https://img.vietqr.io/image/%s-%s-compact2.png?amount=%d&addInfo=%s&accountName=%s",
+		bankCode, accountNumber, amount, addInfo, accountName,
+	)
+
+	// Tạo QR code base64 từ link VietQR
+	qrBytes, err := qrcode.Encode(vietQRLink, qrcode.Medium, 256)
 	if err != nil {
 		http.Error(w, "Error generating QR", http.StatusInternalServerError)
 		return
